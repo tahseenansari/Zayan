@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Samar AI - Multilingual</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: 'Roboto', sans-serif;
+            background-color: white;
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            text-align: center;
+            overflow: hidden;
+        }
+
+        #topBar {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background-color: white;
+            color: black;
+            padding: 10px 0;
+            text-align: center;
+            z-index: 1000;
+        }
+
+        #mainContent {
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            font-size: 18px;
+            height: 100vh;
+            color: white;
+            margin-top: 50px;
+            position: relative;
+        }
+
+        .samar-image {
+            width: 300px;
+            height: 300px;
+            margin-top: 10px;
+            border-radius: 50px;
+            object-fit: cover;
+            cursor: pointer;
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .samar-image:hover {
+            transform: scale(1.05);
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.9);
+        }
+
+        #waveformImage {
+            width: 150px;
+            height: 150px;
+            margin-top: 20px;
+            display: none;
+        }
+
+        #bottomText {
+            position: absolute;
+            bottom: 10px;
+            width: 90%;
+            text-align: center;
+            font-size: 14px;
+            color: gray;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="topBar">
+        _______ Zayan AI
+        _______
+    </div>
+
+    <div id="mainContent">
+        <img src="https://assets.onecompiler.app/4398w3ppx/439fk3p9e/1000013576.jpg" alt="Samar AI" class="samar-image" id="stopTTSImage">
+        <img src="https://cdn.prod.website-files.com/6488cc2b899091ddde57a95d/64a6b0e0740e455bda54f399_Waveform.gif" alt="Waveform" id="waveformImage">
+    </div>
+
+    <div id="bottomText">
+        Some TTS libraries may not be installed on your device.
+    </div>
+
+    <script>
+        const stopTTSImage = document.getElementById('stopTTSImage');
+        const waveformImage = document.getElementById('waveformImage');
+
+        let recognition;
+        let inactivityTimeout;
+        let isSpeaking = false;
+        let currentLanguage = 'en-US';  // Removed language selection, using a default
+
+        // API Configuration (Replace with your actual API keys)
+        const API_KEY = 'sk_4w0FkMeJoGaGD2mOXV2Gwo4TOrVIaFYVCD0mMuyxaYStGTfz'; // Replace with your VectorShift API Key
+        const CHATBOT_NAME = "Samar ai"; // Replace with your VectorShift Chatbot Name
+        const USERNAME = "da_564";  // Replace with your VectorShift Username (or a unique user identifier)
+        const API_URL = "https://api.vectorshift.ai/api/chatbots/run";
+
+
+        // Stop the Text-to-Speech when the image is clicked
+        stopTTSImage.addEventListener("click", () => {
+            if (isSpeaking) {
+                window.speechSynthesis.cancel();
+                console.log("TTS stopped");
+                waveformImage.style.display = 'none';
+                isSpeaking = false;
+                startRecognition();
+            }
+        });
+
+        // Handle user input, check for real-time data or AI response
+        async function handleUserInput(userSpeech) {
+            stopRecognition();
+            clearTimeout(inactivityTimeout);
+            const aiResponse = await generateAPIResponse(userSpeech);
+            speakAIResponse(aiResponse);
+        }
+
+        // Generate AI response via VectorShift API
+        async function generateAPIResponse(userMessage) {
+            try {
+                const response = await fetch(API_URL, {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Api-Key": API_KEY,
+                    },
+                    body: JSON.stringify({
+                        input: userMessage,
+                        chatbot_name: CHATBOT_NAME,
+                        username: USERNAME,
+                    }),
+                });
+
+                if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+                }
+
+                const data = await response.json();
+                const aiResponse = data.output;
+                return aiResponse;
+
+            } catch (error) {
+                console.error('API error:', error);
+                return "Sorry, I couldn't process your request.";
+            }
+        }
+
+
+        // Convert text response to speech (TTS)
+        function speakAIResponse(aiResponse) {
+            isSpeaking = true;
+            waveformImage.style.display = 'block';
+
+            const speech = new SpeechSynthesisUtterance(aiResponse);
+            speech.lang = currentLanguage;
+            speech.rate = 1;
+            speech.pitch = 1;
+
+            speech.onstart = () => {
+                stopRecognition();
+            };
+
+            speech.onend = () => {
+                waveformImage.style.display = 'none';
+                isSpeaking = false;
+                startRecognition();
+            };
+
+            // Find a voice that matches the language
+            const voices = window.speechSynthesis.getVoices();
+            let selectedVoice = voices.find(voice => voice.lang === currentLanguage);
+            if (!selectedVoice) {
+                selectedVoice = voices.find(voice => voice.lang.startsWith(currentLanguage.slice(0, 2)));
+            }
+
+            if (selectedVoice) {
+                speech.voice = selectedVoice;
+            } else {
+                console.warn(`No voice found for language: ${currentLanguage}. Using default.`);
+            }
+
+            window.speechSynthesis.speak(speech);
+        }
+
+        // Microphone functionality - START RECOGNITION
+        function startRecognition() {
+            if ('webkitSpeechRecognition' in window && !isSpeaking) {
+                recognition = new webkitSpeechRecognition();
+                recognition.lang = currentLanguage;
+                recognition.continuous = true;
+
+                recognition.onstart = () => {
+                    console.log('Speech recognition started.');
+                };
+
+                recognition.onresult = (event) => {
+                    let transcript = event.results[event.resultIndex][0].transcript;
+                    if (!isSpeaking) {
+                        console.log('Transcript:', transcript);
+                        handleUserInput(transcript);
+                    }
+                };
+
+                recognition.onerror = (event) => {
+                    console.error('Speech recognition error:', event.error);
+                };
+
+                recognition.onend = () => {
+                    console.log('Speech recognition ended.');
+                    if (!isSpeaking) {
+                        startRecognition();
+                    }
+                };
+
+                recognition.start();
+
+                inactivityTimeout = setTimeout(() => {
+                    stopRecognition();
+                    console.log("Stopped listening due to inactivity.");
+                }, 120000);
+            } else if (isSpeaking) {
+                console.log('Not starting recognition because AI is speaking.');
+            } else {
+                alert('Speech recognition not supported in this browser.');
+            }
+        }
+
+        // Microphone functionality - STOP RECOGNITION
+        function stopRecognition() {
+            if (recognition) {
+                recognition.stop();
+                console.log("Speech recognition stopped.");
+            }
+            clearTimeout(inactivityTimeout);
+        }
+
+
+        // Start recognition when the page loads.
+        document.addEventListener('DOMContentLoaded', () => {
+            // Remove dropdown population, just start recognition with default language
+            window.speechSynthesis.onvoiceschanged = () => {
+                console.log("Voices changed:", window.speechSynthesis.getVoices());
+            };
+            startRecognition();
+        });
+    </script>
+</body>
+</html>
